@@ -17,10 +17,11 @@ class ImageGenerator:
     def __init__(self, config:Config):
         self.config = config
         self.camera = Camera(config)
-        self.renderer = PyrenderRenderer(config)        
+                
         self.axis_generator = AxisViewGenerator(config)
         self.image_queues = [queue.Queue(maxsize=3) for _ in range(6)]  # 初始化缓冲队列
         self.running = False    # 用于线程
+        self.renderer = None
 
     def start_generating(self) -> None:
         '''启动处理线程的接口'''
@@ -31,10 +32,14 @@ class ImageGenerator:
         '''重置标签并释放资源'''
         self.running = False
         self.camera.release()
-        self.renderer.cleanup()
+        if self.renderer is not None:
+            self.renderer.cleanup()
+            self.renderer = None
 
     def _generate_images(self) -> None:
         '''主循环，捕捉帧、求解位姿、渲染、放入队列'''
+        if self.renderer is None:
+            self.renderer = PyrenderRenderer(self.config)
         while self.running:
             frame = self.camera.capture_frame()
             
