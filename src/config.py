@@ -43,7 +43,7 @@ class Config:
         
         # --- 6. 混合视图渲染视角同步 (核心逻辑) ---
         # 我们增加两个变量来控制“拉远距离”和“减小畸变”
-        self.cam_distance_offset = 0.5  # 相机相对于脸部的距离，默认从0.5拉远到0.8米
+        self.cam_distance_offset = 1.5  # 相机相对于脸部的距离，默认从0.5拉远到0.8米
         self.render_yfov = np.radians(25) # 减小渲染FOV（约30度），让成像更平坦，畸变更小
         
         self.campose = np.eye(4) # 渲染视角位姿，将通过 update_sync_campose 自动计算

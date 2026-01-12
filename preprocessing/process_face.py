@@ -11,7 +11,7 @@ material = pyrender.MetallicRoughnessMaterial(
     baseColorFactor=(0.5, 0.5, 0.5, 1.0)  # 纯白色
 )
 
-mesh = trimesh.load_mesh('Head.obj',material=material)
+mesh = trimesh.load_mesh('../../software/Head.obj',material=material)
 
 # 检查 mesh 是否有效
 print(f"Is the mesh watertight? {mesh.is_watertight}")
@@ -37,7 +37,8 @@ extent = mesh.extents  # [x_range, y_range, z_range]
 # 找到最大范围
 max_extent = np.max(extent)
 # 缩放因子：将最大范围缩放到 0.25
-scale_factor = 0.35 / max_extent
+max_size = 0.35
+scale_factor = max_size / max_extent
 # 应用缩放
 mesh.apply_scale(scale_factor)
 
@@ -45,4 +46,4 @@ mesh.visual.material = trimesh.visual.material.SimpleMaterial(
     diffuse=[255, 255, 255, 255]  # 白色材质
 )
 
-mesh.export('head_mesh.obj')
+mesh.export('../data/mesh/head_mesh.obj')
