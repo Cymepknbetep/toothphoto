@@ -106,7 +106,7 @@ print("Creating upper teeth layer...")
 # 1. 定义参数
 # 垂直位移量：决定上下牙齿之间的间隙大小
 # 因为当前模型总高度约 0.1，向上下各移动 0.06 大约能留出一点空隙
-shift_distance = 0.01
+shift_distance = 0.007
 
 # 2. 准备下排牙齿（原始）
 # 复制一份作为最终的下排

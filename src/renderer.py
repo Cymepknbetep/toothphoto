@@ -34,6 +34,8 @@ class PyrenderRenderer(Renderer):
     def _init_scenes(self)->None:
         '''初始化牙齿和相机的两个场景'''
         self.mesh_origin_trimesh = trimesh.load_mesh('../data/mesh/teeth_double_layer.obj')
+        #self.mesh_origin_trimesh = trimesh.load_mesh('../data/mesh/tooth_mesh.obj')
+
         self.scene_tooth = self._create_tooth_scene()
         self.scene_camera = self._create_camera_scene()
         self.scene_chessboard = self._create_chessboard_scene()
@@ -116,14 +118,15 @@ class PyrenderRenderer(Renderer):
         nm_origin = pyrender.Node(mesh=mesh_origin)
         nm_eroded = pyrender.Node(mesh=mesh_eroded)
         self.nl_tooth = pyrender.Node(light=pyrender.PointLight(color=[1,1,1],intensity=1)) # note that when falt_shading is true, light is disabled
-        self.nc_tooth = pyrender.Node(camera=pyrender.PerspectiveCamera(yfov=np.pi/24,aspectRatio=self.config.render_size[0]/self.config.render_size[1]))
+        
+        self.nc_tooth = pyrender.Node(camera=pyrender.PerspectiveCamera(yfov=np.pi * self.config.teeth_fov,aspectRatio=self.config.render_size[0]/self.config.render_size[1]))
         scene_tooth.add_node(nm_origin)
         scene_tooth.add_node(nm_eroded)
         scene_tooth.add_node(self.nc_tooth)
         scene_tooth.add_node(self.nl_tooth)        
         # set poses
-        scene_tooth.set_pose(nm_origin,self.config.cpose)
-        scene_tooth.set_pose(nm_eroded,self.config.cpose)
+        scene_tooth.set_pose(nm_origin,self.config.get_teeth_matrix())
+        scene_tooth.set_pose(nm_eroded,self.config.get_teeth_matrix())
 
         return scene_tooth
 
@@ -184,12 +187,14 @@ class PyrenderRenderer(Renderer):
         nm_face = pyrender.Node(mesh=mesh_face)
         #self.nl_face = pyrender.Node(light=pyrender.PointLight(color=[1,1,1],intensity=30))
         nl_face = pyrender.Node(light=pyrender.DirectionalLight(intensity=2))
-        nc_face = pyrender.Node(camera=pyrender.PerspectiveCamera(yfov=np.pi/3,aspectRatio=self.config.render_size[0]/self.config.render_size[1]))
+        nc_face = pyrender.Node(camera=pyrender.PerspectiveCamera(
+                                yfov=self.config.render_yfov, 
+                                aspectRatio=self.config.render_size[0]/self.config.render_size[1]))
         scene_face.add_node(nm_face)
         scene_face.add_node(nl_face)
         scene_face.add_node(nc_face)
         # set poses
-        scene_face.set_pose(nm_face,pose_face)
+        scene_face.set_pose(nm_face,self.config.get_head_matrix())
         scene_face.set_pose(nc_face,self.config.campose)
         face,_ = self.renderer.render(scene_face)
         # then create the toothimg
@@ -206,7 +211,7 @@ class PyrenderRenderer(Renderer):
         
         scene_tooth.add_node(nl_face)
         scene_tooth.add_node(nc_face)
-        scene_tooth.set_pose(nm_tooth,self.config.cpose)
+        scene_tooth.set_pose(nm_tooth,self.config.get_teeth_matrix())
         scene_tooth.set_pose(nc_face,self.config.campose)
         tooth,_ = self.renderer.render(scene_tooth)
 
@@ -221,37 +226,105 @@ class PyrenderRenderer(Renderer):
         img,_ = self.renderer.render(self.scene_tooth,flags = pyrender.RenderFlags.FLAT)
         return img
     
-    def render_camera(self, pose:np.ndarray)->np.ndarray:
-        '''渲染相机视图，包括交互计算'''
-        arrow_pose = pose.copy()
-        # 传入的是相机to世界 rw = R @ rc
-        z_axis = arrow_pose[:3,:3] @ np.array([0,0,-1])
-        # 保证圆柱的中心在相机中心位置
-        arrow_pose[:3,3] -= z_axis*self.config.arrow_length/2
-        self.scene_camera.set_pose(self.nm_camera,pose)
-        # now calculate interacts use trimesh
-        locations,_,_ = self.mesh_origin_trimesh.ray.intersects_location(
-            ray_origins = [pose[:3,3]-self.config.cpose[:3,3]],        # mainly because of the bias
-            ray_directions = [z_axis],
+    # def render_camera(self, pose: np.ndarray) -> np.ndarray:
+    #     '''渲染相机视图，采用 3x3 九宫格平行射线检测'''
+    #     self.scene_camera.set_pose(self.nm_camera, pose)
+        
+    #     # 1. 参数设置
+    #     radius = 0.002  # 探测半径（九宫格的外边距）
+    #     x_axis = pose[:3, 0] 
+    #     y_axis = pose[:3, 1] 
+    #     z_axis = pose[:3, :3] @ np.array([0, 0, -1]) 
+
+    #     # 射线中心起点（相对于原始 Mesh）
+    #     cam_origin_local = pose[:3, 3] - self.config.teeth_trans
+
+    #     # 2. 构造 3x3 九宫格平行射线起点
+    #     # 偏移系数：[-1, 0, 1] 的组合
+    #     offsets = [-1, 0, 1]
+    #     origins = []
+    #     for dx in offsets:
+    #         for dy in offsets:
+    #             # 计算每一根射线在相机平面的偏移位置
+    #             origin_point = cam_origin_local + (x_axis * dx * radius) + (y_axis * dy * radius)
+    #             origins.append(origin_point)
+        
+    #     directions = [z_axis] * len(origins) # 9 根射线全部保持平行
+
+    #     # 3. 批量检测
+    #     locations, index_ray, index_tri = self.mesh_origin_trimesh.ray.intersects_location(
+    #         ray_origins=origins,
+    #         ray_directions=directions,
+    #         multiple_hits=False
+    #     )
+
+    #     # 4. 寻找到相机最近的交点
+    #     outpos = np.eye(4)
+    #     outpos[:3, 3] = [0, 0, 10]
+
+    #     if len(locations) > 0:
+    #         # 计算到相机起点的欧式距离
+    #         distances = np.linalg.norm(locations - cam_origin_local, axis=1)
+    #         closest_idx = np.argmin(distances)
+            
+    #         # 还原到世界坐标
+    #         world_hit_point = locations[closest_idx] + self.config.teeth_trans
+            
+    #         pos_dot = np.eye(4)
+    #         pos_dot[:3, 3] = world_hit_point
+    #         self.scene_camera.set_pose(self.nm_dot, pos_dot)
+    #     else:
+    #         self.scene_camera.set_pose(self.nm_dot, outpos)
+
+    #     # 5. 渲染与合成（保持不变）
+    #     self.scene_camera.set_pose(self.nc_camera, self.config.campose)
+    #     camera_rendering, _ = self.renderer.render(self.scene_camera)
+        
+    #     temp = np.sum(camera_rendering, axis=2, dtype=np.uint16)
+    #     mask = (temp <= 254 * 3)[:, :, np.newaxis]
+    #     img = (mask * camera_rendering + (~mask) * self.face_img).astype(np.uint8)
+        
+    #     return img
+
+    def render_camera(self, pose: np.ndarray) -> np.ndarray:
+        '''渲染相机视图，还原为单点射线检测（高性能版）'''
+        # 1. 设置物理相机模型位姿
+        self.scene_camera.set_pose(self.nm_camera, pose)
+        
+        # 2. 准备单根射线：中心方向与相对于原始 Mesh 的起点
+        z_axis = pose[:3, :3] @ np.array([0, 0, -1]) 
+        cam_origin_local = pose[:3, 3] - self.config.teeth_trans
+
+        # 3. 执行单次检测
+        locations, _, _ = self.mesh_origin_trimesh.ray.intersects_location(
+            ray_origins=[cam_origin_local],
+            ray_directions=[z_axis],
             multiple_hits=False
         )
-        # we define a far posision for when there's no interacts
+
+        # 4. 处理结果
         outpos = np.eye(4)
-        outpos[:3,3] = [0,0,10]
-        # 检测时候否获得交点
-        if len(locations):
-            locations += self.config.cpose[:3,3]
-            pos = np.eye(4)
-            pos [:3,3] = locations
-            self.scene_camera.set_pose(self.nm_dot,pos)
-        else: self.scene_camera.set_pose(self.nm_dot,outpos)
-        # TODO acctually we could use depth info to blend
-        camera,_ = self.renderer.render(self.scene_camera)
-        temp = np.sum(camera, axis=2, dtype=np.uint16)  # 像素和，注意溢出
-        mask = temp<=254*3
-        mask = mask[:, :, np.newaxis]   # 保证存在新维度，事实上就是None的别名，为了保证可读性
-        img = mask * camera + (~mask) * self.face_img
-        img.astype(np.uint8)
+        outpos[:3, 3] = [0, 0, 10]
+
+        if len(locations) > 0:
+            # 单点检测直接取第一个交点，加回平移量还原到世界系
+            world_hit_point = locations[0] + self.config.teeth_trans
+            
+            pos_dot = np.eye(4)
+            pos_dot[:3, 3] = world_hit_point
+            self.scene_camera.set_pose(self.nm_dot, pos_dot)
+        else:
+            self.scene_camera.set_pose(self.nm_dot, outpos)
+
+        # 5. 视角同步与渲染
+        self.scene_camera.set_pose(self.nc_camera, self.config.campose)
+        camera_rendering, _ = self.renderer.render(self.scene_camera)
+        
+        # 6. 图像合成
+        temp = np.sum(camera_rendering, axis=2, dtype=np.uint16)
+        mask = (temp <= 254 * 3)[:, :, np.newaxis]
+        img = (mask * camera_rendering + (~mask) * self.face_img).astype(np.uint8)
+        
         return img
 
     def cleanup(self)->None:
