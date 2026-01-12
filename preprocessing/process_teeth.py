@@ -40,9 +40,9 @@ if not mesh.is_watertight:
     mesh.fill_holes()
 
 # 缩放
-max_scale = 0.1
+max_scale = 0.05 #成年人牙齿约间隔0.05m
 # 定义腐蚀量
-erosion_amount = 0.3  # 调整腐蚀程度，单位与SDF值一致
+erosion_amount = 0.5  # 调整腐蚀程度，单位与SDF值一致
 
 if gen_again or not os.path.exists("../temp/voxels.npy"):
     # 1. 提高分辨率：64 对整排牙齿来说太低了，牙缝会粘连。建议 128 或更高。
@@ -106,7 +106,7 @@ print("Creating upper teeth layer...")
 # 1. 定义参数
 # 垂直位移量：决定上下牙齿之间的间隙大小
 # 因为当前模型总高度约 0.1，向上下各移动 0.06 大约能留出一点空隙
-shift_distance = 0.02
+shift_distance = 0.01
 
 # 2. 准备下排牙齿（原始）
 # 复制一份作为最终的下排

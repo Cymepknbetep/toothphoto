@@ -6,7 +6,8 @@ import threading
 import queue
 import time
 import numpy as np
-
+import time # for debug
+import cv2
 from config import Config
 from camera import Camera
 from renderer import PyrenderRenderer
@@ -36,16 +37,16 @@ class ImageGenerator:
         '''主循环，捕捉帧、求解位姿、渲染、放入队列'''
         while self.running:
             frame = self.camera.capture_frame()
-            import time # for debug
+            
             a = time.time()
+            ret, corners = self.camera.detect_chessboard(frame)
             if self.config.camera_test:
                 # 相机调试，放入队列 [5]
                 # rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 #rgb_frame = frame[:,:,::-1]
                 # 在中心添加红点
                 frame[self.config.camera_resolution[1]//2-3:self.config.camera_resolution[1]//2+3, self.config.camera_resolution[0]//2-3:self.config.camera_resolution[0]//2+3, :] = [255,0,0]
-                self._put_image(frame,5)
-            ret, corners = self.camera.detect_chessboard(frame)
+            debug_frame = frame.copy()
             if ret:
                 pose_pyrender, camera_pose = self.camera.solve_pose(corners)
                 tooth_img = self.renderer.render_tooth(pose_pyrender)
@@ -56,6 +57,11 @@ class ImageGenerator:
                 self._put_image(img_front,2)
                 self._put_image(img_top,3)
                 self._put_image(img_side,4)
+                if self.config.camera_test:
+                    board_overlay = self.renderer.render_chessboard(pose_pyrender)
+                    board_overlay = cv2.resize(board_overlay, self.config.camera_resolution)
+                    debug_frame = cv2.addWeighted(debug_frame, 0.7, board_overlay, 0.7, 0)
+            self._put_image(debug_frame,5)
             print("Time per frame:",time.time()-a) # for debug
             
 

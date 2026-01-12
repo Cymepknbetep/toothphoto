@@ -33,9 +33,58 @@ class PyrenderRenderer(Renderer):
 
     def _init_scenes(self)->None:
         '''初始化牙齿和相机的两个场景'''
-        self.mesh_origin_trimesh = trimesh.load_mesh('../data/mesh/tooth_mesh.obj')
+        self.mesh_origin_trimesh = trimesh.load_mesh('../data/mesh/teeth_double_layer.obj')
         self.scene_tooth = self._create_tooth_scene()
         self.scene_camera = self._create_camera_scene()
+        self.scene_chessboard = self._create_chessboard_scene()
+
+    def _create_chessboard_scene(self) -> pyrender.Scene:
+        '''创建标定板渲染场景'''
+        scene = pyrender.Scene(bg_color=[0, 0, 0, 0]) # 背景透明（但在Offscreen中通常表现为黑色）
+        
+        # 计算标定板物理尺寸 (假设外围多出一个边框)
+        width = (self.config.chessboard_size[0] + 1) * self.config.chessboard_square_size
+        height = (self.config.chessboard_size[1] + 1) * self.config.chessboard_square_size
+        
+        # 创建一个薄板 (Box)，中心对齐
+        # 注意：OpenCV 棋盘格定义在 Z=0 平面，这里创建一个稍微有一点厚度的板或者平面
+        board_mesh = trimesh.creation.box(extents=[width, height, 0.001])
+        
+        # 将板的中心偏移，使得第一个角点(0,0,0)对应正确位置
+        # trimesh.box 默认中心在原点，而 solvePnP 的原点是第一个内角点
+        # 我们需要根据内角点数量将模型中心平移
+        offset_x = (self.config.chessboard_size[0] - 1) * self.config.chessboard_square_size / 2
+        offset_y = (self.config.chessboard_size[1] - 1) * self.config.chessboard_square_size / 2
+        board_mesh.apply_translation([offset_x, -offset_y, 0])
+
+        material = pyrender.material.MetallicRoughnessMaterial(
+            baseColorFactor=[0.0, 1.0, 0.0, 0.5], # 绿色半透明，方便调试
+            metallicFactor=0,
+            roughnessFactor=1.0
+        )
+        
+        mesh = pyrender.Mesh.from_trimesh(board_mesh, material=material)
+        self.nm_chessboard = pyrender.Node(mesh=mesh)
+        scene.add_node(self.nm_chessboard)
+
+        # 添加相机节点（使用与牙齿渲染一致的相机参数）
+        self.nc_chessboard = pyrender.Node(camera=pyrender.PerspectiveCamera(
+            yfov=self.config.get_yfov(), 
+            aspectRatio=self.config.camera_resolution[0]/self.config.camera_resolution[1]))
+        scene.add_node(self.nc_chessboard)
+        
+        # 添加光照
+        scene.add_node(pyrender.Node(light=pyrender.DirectionalLight(color=[1, 1, 1], intensity=2)))
+        
+        return scene
+    
+    def render_chessboard(self, pose: np.ndarray) -> np.ndarray:
+        '''根据位姿渲染标定板平面'''
+        # 标定板固定在世界原点，移动相机
+        self.scene_chessboard.set_pose(self.nc_chessboard, pose)
+        # 强制渲染分辨率与相机一致，以便叠加
+        img, _ = self.renderer.render(self.scene_chessboard)
+        return img
 
     def _create_tooth_scene(self)->pyrender.Scene:
         '''
@@ -62,7 +111,7 @@ class PyrenderRenderer(Renderer):
         )
         # init meshes
         mesh_origin = pyrender.Mesh.from_trimesh(self.mesh_origin_trimesh,material=material_origin)
-        mesh_eroded = pyrender.Mesh.from_trimesh(trimesh.load_mesh('../data/mesh/tooth_eroded_mesh.obj'),material=material_eroded)
+        mesh_eroded = pyrender.Mesh.from_trimesh(trimesh.load_mesh('../data/mesh/teeth_double_layer_eroded.obj'),material=material_eroded)
         # init and add nodes
         nm_origin = pyrender.Node(mesh=mesh_origin)
         nm_eroded = pyrender.Node(mesh=mesh_eroded)
